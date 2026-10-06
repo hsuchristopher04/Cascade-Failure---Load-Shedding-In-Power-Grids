@@ -63,9 +63,18 @@ def node_metric_summary(node_metrics_df, node_cascade_df, k=10):
     return pd.DataFrame(rows).sort_values("spearman_vs_shed", ascending=False)
 
 
+def _line_metrics(edge_metrics_df):
+    """Keep only line rows of an edge metric table, with ``element_id`` renamed to ``line_id``."""
+    lines = edge_metrics_df[edge_metrics_df["element"] == "line"]
+    return lines.drop(columns="element").rename(columns={"element_id": "line_id"})
+
+
 def edge_metric_summary(edge_metrics_df, edge_cascade_df):
-    """Correlations of edge betweenness against cascade severity (solver failures excluded)."""
-    compare = edge_metrics_df.merge(
+    """Correlations of line betweenness against cascade severity (solver failures excluded).
+
+    Only lines are compared because the edge scan only triggers line outages.
+    """
+    compare = _line_metrics(edge_metrics_df).merge(
         edge_cascade_df[["initial_line", "cascade_size", "shed_percent", "solver_failed"]],
         left_on="line_id", right_on="initial_line", how="inner",
     )
@@ -85,7 +94,7 @@ def sensitivity_sweep(net, edge_metrics_df, alphas=(0.10, 0.20, 0.30, 0.40),
     rows = []
     for alpha, min_base_loading in product(alphas, min_base_loadings):
         cascades = scan_edge_cascades(net, alpha=alpha, min_base_loading=min_base_loading)
-        compare = edge_metrics_df.merge(
+        compare = _line_metrics(edge_metrics_df).merge(
             cascades[["initial_line", "cascade_size", "shed_percent", "solver_failed"]],
             left_on="line_id", right_on="initial_line", how="inner",
         )

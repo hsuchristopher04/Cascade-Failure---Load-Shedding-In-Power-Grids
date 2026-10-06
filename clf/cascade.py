@@ -36,12 +36,14 @@ def _largest_component_size(net):
     return len(max(nx.connected_components(G), key=len))
 
 
-def _summarize(netc, initial_lines, tripped_lines, iterations, solver_failed):
+def _summarize(netc, initial_lines, initial_trafos, tripped_lines, iterations, solver_failed):
     served_load, shed_load, shed_percent = compute_load_shed(netc)
+    single_line = len(initial_lines) == 1 and not initial_trafos
     return {
-        "initial_line": int(initial_lines[0]) if len(initial_lines) == 1 else None,
+        "initial_line": int(initial_lines[0]) if single_line else None,
         "initial_lines": initial_lines,
-        "cascade_size": len(tripped_lines),
+        "initial_trafos": initial_trafos,
+        "cascade_size": len(tripped_lines) + len(initial_trafos),
         "tripped_lines": tripped_lines,
         "iterations": iterations,
         "solver_failed": solver_failed,
@@ -52,25 +54,34 @@ def _summarize(netc, initial_lines, tripped_lines, iterations, solver_failed):
     }
 
 
-def run_cascade(net, initial_line=None, initial_lines=None,
+def run_cascade(net, initial_line=None, initial_lines=None, initial_trafos=None,
                 alpha=DEFAULT_ALPHA, min_base_loading=DEFAULT_MIN_BASE_LOADING):
-    """Simulate a cascade triggered by removing one or more lines.
+    """Simulate a cascade triggered by removing lines and/or transformers.
 
     ``net`` must already have a solved baseline power flow (``net.res_line``).
     A line trips when its loading exceeds
     ``max(baseline_loading, min_base_loading) * (1 + alpha)``.
     The loop repeats AC power flow until no new lines trip or the solver fails.
+    Only lines can trip during the cascade; transformers are removed only as
+    initial outages.
+
+    ``cascade_size`` counts every branch out of service at the end, including
+    the initial outages.
     """
+    if initial_line is None and initial_lines is None and initial_trafos is None:
+        raise ValueError("Provide initial_line, initial_lines, or initial_trafos")
     if initial_lines is None:
-        if initial_line is None:
-            raise ValueError("Provide either initial_line or initial_lines")
-        initial_lines = [int(initial_line)]
+        initial_lines = [] if initial_line is None else [int(initial_line)]
     else:
         initial_lines = [int(x) for x in initial_lines]
+    initial_trafos = [int(x) for x in (initial_trafos or [])]
 
     netc = copy.deepcopy(net)
     baseline_loading = net.res_line.loading_percent.copy()
     threshold = baseline_loading.clip(lower=min_base_loading) * (1.0 + alpha)
+
+    for trafo_id in initial_trafos:
+        netc.trafo.at[trafo_id, "in_service"] = False
 
     tripped_lines = []
     for line_id in initial_lines:
@@ -83,7 +94,7 @@ def run_cascade(net, initial_line=None, initial_lines=None,
         try:
             pp.runpp(netc)
         except Exception:
-            return _summarize(netc, initial_lines, tripped_lines, iterations, solver_failed=True)
+            return _summarize(netc, initial_lines, initial_trafos, tripped_lines, iterations, solver_failed=True)
 
         current_loading = netc.res_line.loading_percent
         overload_mask = netc.line["in_service"] & (current_loading > threshold)
@@ -99,19 +110,21 @@ def run_cascade(net, initial_line=None, initial_lines=None,
             netc.line.at[line_id, "in_service"] = False
             tripped_lines.append(line_id)
 
-    return _summarize(netc, initial_lines, tripped_lines, iterations, solver_failed=False)
+    return _summarize(netc, initial_lines, initial_trafos, tripped_lines, iterations, solver_failed=False)
 
 
 def run_node_cascade(net, bus_id, alpha=DEFAULT_ALPHA, min_base_loading=DEFAULT_MIN_BASE_LOADING):
-    """Simulate a cascade triggered by removing every line incident to ``bus_id``."""
-    incident_lines = net.line.index[
-        (net.line["from_bus"] == bus_id) | (net.line["to_bus"] == bus_id)
-    ].tolist()
+    """Simulate a cascade triggered by removing every line and transformer incident to ``bus_id``."""
+    lines = net.line[net.line["in_service"]]
+    trafos = net.trafo[net.trafo["in_service"]]
+    incident_lines = lines.index[(lines["from_bus"] == bus_id) | (lines["to_bus"] == bus_id)].tolist()
+    incident_trafos = trafos.index[(trafos["hv_bus"] == bus_id) | (trafos["lv_bus"] == bus_id)].tolist()
 
-    result = run_cascade(net, initial_lines=incident_lines, alpha=alpha,
-                         min_base_loading=min_base_loading)
+    result = run_cascade(net, initial_lines=incident_lines, initial_trafos=incident_trafos,
+                         alpha=alpha, min_base_loading=min_base_loading)
     result["initial_bus"] = int(bus_id)
     result["incident_line_count"] = len(incident_lines)
+    result["incident_trafo_count"] = len(incident_trafos)
     return result
 
 

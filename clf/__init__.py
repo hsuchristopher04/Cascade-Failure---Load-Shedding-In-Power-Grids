@@ -1,9 +1,15 @@
 """Cascading load failure (CLF) simulation and graph-metric analysis for power grids.
 
-Shared code for the case118 / case300 notebooks and ``run_analysis.py``.
+Shared simulation code for the IEEE case118 and case300 analyses.
 """
 
-from clf.grid import build_graph, compute_edge_metrics, compute_node_metrics, load_case
+from clf.grid import (
+    build_graph,
+    build_multigraph,
+    compute_edge_metrics,
+    compute_node_metrics,
+    load_case,
+)
 from clf.cascade import (
     compute_load_shed,
     run_cascade,
@@ -21,6 +27,7 @@ from clf.analysis import (
 
 __all__ = [
     "build_graph",
+    "build_multigraph",
     "compute_edge_metrics",
     "compute_load_shed",
     "compute_node_metrics",
