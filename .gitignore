@@ -34,3 +34,5 @@ dist/
 
 # Logs
 *.log
+# Output from run_analysis.py
+results/
