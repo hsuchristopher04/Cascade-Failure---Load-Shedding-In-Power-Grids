@@ -36,6 +36,38 @@ This project uses standard IEEE benchmark networks provided through `pandapower`
 
 ---
 
+## Running the Code
+
+```bash
+pip install -r requirements.txt
+
+# Full analysis for one case (about 1.5 minutes each)
+python run_analysis.py --case case118
+python run_analysis.py --case case300
+
+# Both cases plus the alpha/min_base_loading sensitivity sweep (much slower)
+python run_analysis.py --case all --sweep
+
+# Run the tests
+pytest
+```
+
+Results (CSVs and plots) are written to `results/<case>/`.
+
+The simulation code lives in the `clf/` package:
+
+- `clf/grid.py`: loads IEEE cases and builds bus graphs (lines and transformers)
+- `clf/cascade.py`: cascade simulation and load-shed calculation
+- `clf/analysis.py`: correlations, top-k overlap, and the sensitivity sweep
+
+**Note:** `clf/` fixes two issues in the original notebook code. The graph now includes
+transformers (previously the case118 and case300 graphs split into 6 and 78 disconnected
+pieces), and load shed now counts loads cut off from the slack bus (previously the baseline,
+with nothing tripped, already showed 4.3% shed for case118 and 16.8% for case300).
+Because of this, numbers from `run_analysis.py` differ from the notebooks and the final report.
+
+---
+
 ## Methods
 
 ### Graph-Based Metrics
