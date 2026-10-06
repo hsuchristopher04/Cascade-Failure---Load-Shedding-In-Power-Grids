@@ -12,17 +12,39 @@ DEFAULT_ALPHA = 0.20
 DEFAULT_MIN_BASE_LOADING = 0.10
 
 
+def _slack_buses(net):
+    buses = set(net.ext_grid.loc[net.ext_grid["in_service"], "bus"].astype(int))
+    slack_gens = net.gen["in_service"] & net.gen["slack"].astype(bool)
+    buses |= set(net.gen.loc[slack_gens, "bus"].astype(int))
+    return buses
+
+
+def supplied_buses(net, G=None):
+    """Buses connected through in-service lines/transformers to a slack bus.
+
+    This matches what pandapower's power flow can solve: buses in an island
+    without a slack bus are left out of the solution, so their load is lost.
+    """
+    G = G if G is not None else build_graph(net)
+    slacks = _slack_buses(net)
+    supplied = set()
+    for component in nx.connected_components(G):
+        if component & slacks:
+            supplied |= component
+    return supplied
+
+
 def compute_load_shed(net):
     """Return ``(served_mw, shed_mw, shed_percent)`` for the current state of ``net``.
 
-    A load counts as served if its bus touches at least one in-service line.
+    A load counts as served if its bus is still connected to a slack bus
+    (see :func:`supplied_buses`). Loads in islands with no slack bus are shed.
     """
-    total_load = net.load["p_mw"].sum()
+    loads = net.load[net.load["in_service"]]
+    p_mw = loads["p_mw"] * loads["scaling"]
+    total_load = p_mw.sum()
 
-    active_lines = net.line[net.line["in_service"]]
-    active_buses = set(active_lines["from_bus"].astype(int)) | set(active_lines["to_bus"].astype(int))
-
-    served_load = net.load[net.load["bus"].isin(active_buses)]["p_mw"].sum()
+    served_load = p_mw[loads["bus"].isin(supplied_buses(net))].sum()
     shed_load = total_load - served_load
     shed_percent = 100.0 * shed_load / total_load if total_load > 0 else 0.0
 

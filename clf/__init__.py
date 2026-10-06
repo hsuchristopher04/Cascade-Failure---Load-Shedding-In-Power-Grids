@@ -16,6 +16,7 @@ from clf.cascade import (
     run_node_cascade,
     scan_edge_cascades,
     scan_node_cascades,
+    supplied_buses,
 )
 from clf.analysis import (
     edge_metric_summary,
@@ -40,5 +41,6 @@ __all__ = [
     "scan_edge_cascades",
     "scan_node_cascades",
     "sensitivity_sweep",
+    "supplied_buses",
     "top_k_overlap",
 ]
