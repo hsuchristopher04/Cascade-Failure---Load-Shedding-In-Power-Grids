@@ -92,13 +92,21 @@ I also evaluate how results change under different overload settings by sweeping
 
 ## Repository Contents
 
-```text
+```
 .
-├── cascading_load_failure.py
-├── clf.ipynb
+├── cascading_load_failure.py                    # Core cascade simulation and analysis code
+├── clf-case118.ipynb                            # Analysis on the IEEE 118-bus system
+├── clf-case300.ipynb                            # Analysis on the IEEE 300-bus system
+├── figures/                                     # Generated plots
+├── related-papers/                              # Background literature
+├── CLF-Final-Report.pdf
+├── final.pdf
 ├── Graph Mining Project Proposal.pdf
+├── Graph Mining Project Update.pdf
 ├── Graph Mining Project Results.pdf
 ├── Graph-Mining-Project-Final-Presentation.pdf
-├── final.pdf
+├── project-proposal-pdf.pdf
+├── update.pdf
 └── README.md
+```
 
