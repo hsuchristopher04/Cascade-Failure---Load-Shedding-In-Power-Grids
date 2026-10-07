@@ -103,22 +103,34 @@ I also evaluate how results change under different overload settings by sweeping
 
 ## Key Findings
 
+These results come from `python run_analysis.py --case all` (`alpha=0.2`, `min_base_loading=0.1`)
+and are taken from `results/<case>/node_metric_summary.csv` and `edge_metric_summary.csv`.
+"Load shed" is percent of total load; "cascade size" is the number of branches (lines and transformers) out of service at the end, including the initial outage.
+They replace the findings from the original notebook code (see the note above).
+
 ### Case118
-- Node degree was generally a stronger predictor of simulation impact than node betweenness
-- Edge betweenness was weak for predicting cascade severity
-- Several low-degree buses still caused high load shed
-- Graph-based importance and simulation-based criticality did **not** fully align
+- Power flow failed to converge for 2 of 173 line outages and 2 of 118 bus outages; these are excluded from the correlations
+- All node metrics are weak predictors of simulated severity (every correlation is below 0.35)
+- Node degree is the strongest node metric, for both load shed (Pearson 0.29, Spearman 0.33) and cascade size (Pearson 0.22, Spearman 0.25)
+- Node betweenness is second for load shed (Pearson 0.24, Spearman 0.22) but is close to zero for cascade size (Pearson 0.06, Spearman 0.13)
+- Closeness and eigenvector centrality are close to zero for load shed and slightly negative for cascade size (Spearman -0.13 and -0.20)
+- Edge betweenness shows no relationship with either load shed or cascade size (all correlations between -0.07 and 0)
+- The 10 buses ranked highest by any metric share at most 3 buses with the 10 worst by load shed, and at most 2 with the 10 worst by cascade size
 
 ### Case300
-- Correlations between node metrics and simulation impact were much stronger
-- Node degree became the strongest overall predictor
-- Larger-network structure appeared to be more informative for cascade severity
-- Topology was more predictive in `case300` than in `case118`
+- **Power flow failed to converge for 130 of 283 line outages and 133 of 300 bus outages.** These are excluded from the correlations, so the results below cover only the 153 line and 167 bus outages that converged. The excluded outages may not be representative, so treat these numbers with caution
+- Node degree and node betweenness perform about equally well, and best among node metrics, for cascade size (Spearman 0.41 and 0.39, Pearson 0.29 for both)
+- For load shed they are weaker (degree: Pearson 0.20, Spearman 0.31; betweenness: Pearson 0.14, Spearman 0.26)
+- Node betweenness has the best top-10 match for load shed: 8 of its 10 highest-ranked buses are among the 10 worst by load shed. For cascade size, no metric matches more than 2 of 10
+- Eigenvector centrality is negatively rank-correlated with severity (Spearman -0.23 for load shed, -0.30 for cascade size)
+- Edge betweenness has Pearson 0.33 with cascade size and 0.19 with load shed, but Spearman only 0.13 and 0.05, so the linear relationship appears to depend on a small number of outages
 
 ### Overall
-- Not all graph metrics capture criticality equally well
-- Structural importance alone is not enough to identify the most dangerous failures
-- Simulation remains necessary, especially for smaller or less structurally regular networks
+- No graph metric is a strong predictor of cascade severity in either case; the largest correlation is 0.41 (degree vs. cascade size in case300)
+- Node degree is the most consistent predictor across both cases and both outcomes; closeness and eigenvector centrality are the weakest
+- The metrics' top-10 rankings mostly differ from the 10 most severe outages, with the one exception of node betweenness vs. load shed in case300
+- Because almost half of the case300 outages are excluded, these results do not show whether topology is more or less predictive in the larger grid
+- Structural importance alone is not enough to identify the most dangerous failures; simulation remains necessary
 
 ---
 
@@ -126,10 +138,23 @@ I also evaluate how results change under different overload settings by sweeping
 
 ```
 .
-├── cascading_load_failure.py                    # Core cascade simulation and analysis code
-├── clf-case118.ipynb                            # Analysis on the IEEE 118-bus system
-├── clf-case300.ipynb                            # Analysis on the IEEE 300-bus system
-├── figures/                                     # Generated plots
+├── clf/                                         # Simulation and analysis package
+│   ├── __init__.py
+│   ├── analysis.py                              # Correlations, top-k overlap, sensitivity sweep
+│   ├── cascade.py                               # Cascade simulation and load-shed calculation
+│   └── grid.py                                  # Loads IEEE cases and builds bus graphs
+├── tests/                                       # pytest tests for clf/
+│   ├── __init__.py
+│   ├── conftest.py
+│   ├── test_cascade.py
+│   └── test_grid.py
+├── run_analysis.py                              # Command-line entry point; writes results/<case>/
+├── requirements.txt
+├── pytest.ini
+├── cascading_load_failure.py                    # Early script that prints the case118 network tables
+├── clf-case118.ipynb                            # Original analysis on the IEEE 118-bus system
+├── clf-case300.ipynb                            # Original analysis on the IEEE 300-bus system
+├── figures/                                     # Plots from the notebooks
 ├── related-papers/                              # Background literature
 ├── CLF-Final-Report.pdf
 ├── final.pdf
