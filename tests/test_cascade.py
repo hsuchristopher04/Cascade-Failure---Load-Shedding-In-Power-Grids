@@ -1,8 +1,10 @@
 import copy
 
+import pandapower as pp
 import pytest
 
 from clf import compute_load_shed, run_cascade, run_node_cascade, supplied_buses
+from clf.cascade import DEFAULT_SHED_STEP, SHED_BISECTION_ROUNDS
 
 
 def test_run_cascade_requires_an_outage(net118):
@@ -74,3 +76,54 @@ def test_node_cascade_sheds_at_least_the_removed_bus_load(net118):
     result = run_node_cascade(net118, bus)
     bus_load = net118.load.loc[net118.load["bus"] == bus, "p_mw"].sum()
     assert result["shed_load_mw"] >= bus_load - 1e-9
+
+
+@pytest.fixture(scope="module")
+def stressed118(net118):
+    # Four times the load and generation, applied after the baseline solve:
+    # AC power flow no longer converges at full load but does at lower load.
+    net = copy.deepcopy(net118)
+    net.load["p_mw"] *= 4
+    net.load["q_mvar"] *= 4
+    net.gen["p_mw"] *= 4
+    return net
+
+
+# alpha is huge so no line trips: any load shed comes from emergency shedding alone.
+NO_TRIP_ALPHA = 1e6
+
+
+def test_nonconvergence_sheds_load_until_power_flow_solves(stressed118):
+    result = run_cascade(stressed118, initial_line=5, alpha=NO_TRIP_ALPHA)
+    assert not result["solver_failed"]
+    assert 0 < result["load_scale"] < 1
+    assert result["cascade_size"] == 1
+    assert result["shed_percent"] == pytest.approx(100 * (1 - result["load_scale"]))
+
+
+def test_emergency_shed_is_close_to_minimal(stressed118):
+    result = run_cascade(stressed118, initial_line=5, alpha=NO_TRIP_ALPHA)
+    net = copy.deepcopy(stressed118)
+    net.line.at[5, "in_service"] = False
+    scale = result["load_scale"] + DEFAULT_SHED_STEP / 2 ** SHED_BISECTION_ROUNDS
+    for element in ("load", "gen", "sgen"):
+        net[element]["scaling"] = scale
+    with pytest.raises(pp.LoadflowNotConverged):
+        pp.runpp(net)
+
+
+def test_shedding_can_be_disabled(stressed118):
+    result = run_cascade(stressed118, initial_line=5, alpha=NO_TRIP_ALPHA, shed_step=None)
+    assert result["solver_failed"]
+    assert result["load_scale"] == 1.0
+
+
+def test_shedding_does_not_modify_input(stressed118):
+    run_cascade(stressed118, initial_line=5, alpha=NO_TRIP_ALPHA)
+    assert (stressed118.load["scaling"] == 1.0).all()
+    assert (stressed118.gen["scaling"] == 1.0).all()
+
+
+def test_converging_cascade_sheds_nothing_extra(net118):
+    result = run_cascade(net118, initial_line=5)
+    assert result["load_scale"] == 1.0
